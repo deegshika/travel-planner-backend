@@ -1,0 +1,8 @@
+# Render.com Web Service deployment configuration for FastAPI application. This configuration defines the runtime environment, build process, and start command for deploying a FastAPI app on Render.com's infrastructure. The service will automatically scale based on demand and bind to the $PORT environment variable provided by Render, ensuring the application is accessible via the assigned URL. The start command uses uvicorn to run the FastAPI application with optimal settings for production deployment.
+
+services:
+  - type: web
+    name: fastapi-app
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
