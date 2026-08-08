@@ -3,7 +3,7 @@
 An AI-powered trip itinerary generator that turns a destination, trip length, budget, and interests into a full day-by-day plan — grounded in real local data, not just LLM guesswork.
 
 **Live demo:**
-- Frontend: https://travel-planner-frontend.vercel.app
+- Frontend: [https://travel-planner-frontend.vercel.app](https://travel-planner-frontend-two.vercel.app/)
 - Backend API docs: https://travel-planner-backend-nlwx.onrender.com/docs
 
 ---
