@@ -271,6 +271,46 @@ Mention that the weather is a current forecast and should be rechecked before de
     return packing_list, weather_summary
 
 
+def replace_itinerary_activity(
+    destination: str,
+    itinerary: str,
+    activity: str,
+    replacement_preferences: str,
+) -> str:
+    query = f"{destination} {replacement_preferences or activity}"
+    results = collection.query(
+        query_texts=[query],
+        n_results=5,
+        where={"city": destination},
+    )
+    local_options = []
+    for documents in results.get("documents", []):
+        if isinstance(documents, list):
+            local_options.extend(documents)
+
+    prompt = f"""
+You are carefully editing an existing travel itinerary for {destination}.
+
+Existing itinerary:
+{itinerary}
+
+Activity to replace:
+{activity}
+
+Traveller's replacement preference:
+{replacement_preferences or 'Choose the best comparable local alternative.'}
+
+Grounded local options:
+{chr(10).join(local_options) if local_options else 'No matching local guide entries found.'}
+
+Return the complete revised itinerary in Markdown. Replace only the requested activity and
+the directly related timing, transport, or cost details. Preserve every unrelated day and
+activity. Use a real option from the grounded local data when suitable. Do not add commentary
+before or after the revised itinerary.
+"""
+    return llm.invoke(prompt).content
+
+
 if __name__ == "__main__":
     sample: TripState = {
         "destination": "Bangalore",

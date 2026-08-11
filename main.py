@@ -7,7 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from supabase import create_client
 
-from graph import trip_graph, ask_local_expert, generate_packing_list
+from graph import (
+    trip_graph,
+    ask_local_expert,
+    generate_packing_list,
+    replace_itinerary_activity,
+)
 from chroma_setup import build_chroma
 import chromadb
 from dotenv import load_dotenv
@@ -46,6 +51,13 @@ class PackingRequest(BaseModel):
     people: int = Field(ge=1, le=20)
     travel_style: Literal["light", "balanced", "prepared"]
     itinerary: str = Field(min_length=20, max_length=30000)
+
+
+class ReplaceActivityRequest(BaseModel):
+    destination: str = Field(min_length=2, max_length=100)
+    itinerary: str = Field(min_length=20, max_length=30000)
+    activity: str = Field(min_length=2, max_length=500)
+    replacement_preferences: str = Field(default="", max_length=1000)
 
 
 app = FastAPI()
@@ -123,3 +135,14 @@ def packing_list(request: PackingRequest) -> dict[str, str]:
         "packing_list": packing_result,
         "weather_summary": weather_summary,
     }
+
+
+@app.post("/replace-activity")
+def replace_activity(request: ReplaceActivityRequest) -> dict[str, str]:
+    updated_itinerary = replace_itinerary_activity(
+        destination=request.destination,
+        itinerary=request.itinerary,
+        activity=request.activity,
+        replacement_preferences=request.replacement_preferences,
+    )
+    return {"updated_itinerary": updated_itinerary}
