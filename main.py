@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from supabase import create_client
 
-from graph import trip_graph, ask_local_expert
+from graph import trip_graph, ask_local_expert, generate_packing_list
 from chroma_setup import build_chroma
 import chromadb
 from dotenv import load_dotenv
@@ -38,6 +38,14 @@ class QuestionRequest(BaseModel):
     destination: str | None = None
     itinerary: str | None = None
     history: list[ChatMessage] = Field(default_factory=list, max_length=20)
+
+
+class PackingRequest(BaseModel):
+    destination: str = Field(min_length=2, max_length=100)
+    days: int = Field(ge=1, le=30)
+    people: int = Field(ge=1, le=20)
+    travel_style: Literal["light", "balanced", "prepared"]
+    itinerary: str = Field(min_length=20, max_length=30000)
 
 
 app = FastAPI()
@@ -100,3 +108,18 @@ def ask(request: QuestionRequest) -> dict[str, str]:
         history=[message.model_dump() for message in request.history],
     )
     return {"answer": answer}
+
+
+@app.post("/packing-list")
+def packing_list(request: PackingRequest) -> dict[str, str]:
+    packing_result, weather_summary = generate_packing_list(
+        destination=request.destination,
+        days=request.days,
+        people=request.people,
+        travel_style=request.travel_style,
+        itinerary=request.itinerary,
+    )
+    return {
+        "packing_list": packing_result,
+        "weather_summary": weather_summary,
+    }

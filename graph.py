@@ -1,4 +1,5 @@
 from typing import TypedDict, List
+import logging
 import os
 from dotenv import load_dotenv
 from langchain_core.prompts import PromptTemplate
@@ -16,8 +17,11 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 
 import chromadb
+import httpx
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
+
+logger = logging.getLogger(__name__)
 
 
 class TripState(TypedDict):
@@ -175,6 +179,96 @@ def ask_local_expert(
 
     result = local_expert_agent.invoke({"messages": messages})
     return result["messages"][-1].content
+
+
+def get_destination_weather(destination: str, days: int) -> str:
+    """Return a compact current forecast summary for packing guidance."""
+    weather_location_aliases = {
+        "Bangalore": "Bengaluru",
+        "Mysore": "Mysuru",
+        "Ooty": "Udhagamandalam",
+    }
+    location_query = weather_location_aliases.get(destination, destination)
+    try:
+        with httpx.Client(timeout=10.0) as weather_client:
+            location_response = weather_client.get(
+                "https://geocoding-api.open-meteo.com/v1/search",
+                params={
+                    "name": location_query,
+                    "count": 1,
+                    "language": "en",
+                    "format": "json",
+                    "countryCode": "IN",
+                },
+            )
+            location_response.raise_for_status()
+            locations = location_response.json().get("results", [])
+            if not locations:
+                return "Current forecast unavailable for this destination."
+
+            location = locations[0]
+            forecast_response = weather_client.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": location["latitude"],
+                    "longitude": location["longitude"],
+                    "daily": (
+                        "temperature_2m_max,temperature_2m_min,"
+                        "precipitation_probability_max,weather_code"
+                    ),
+                    "forecast_days": min(max(days, 1), 16),
+                    "timezone": "auto",
+                },
+            )
+            forecast_response.raise_for_status()
+            daily = forecast_response.json().get("daily", {})
+
+        dates = daily.get("time", [])
+        highs = daily.get("temperature_2m_max", [])
+        lows = daily.get("temperature_2m_min", [])
+        rain = daily.get("precipitation_probability_max", [])
+        if not dates or not highs or not lows:
+            return "Current forecast unavailable for this destination."
+
+        return (
+            f"Current {len(dates)}-day forecast for {location['name']}: "
+            f"highs {min(highs):.0f}-{max(highs):.0f}°C, "
+            f"lows {min(lows):.0f}-{max(lows):.0f}°C, "
+            f"maximum rain probability {max(rain or [0]):.0f}%."
+        )
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        logger.warning("Weather lookup failed for %s: %s", destination, exc)
+        return "Current forecast unavailable; pack for typical destination conditions."
+
+
+def generate_packing_list(
+    destination: str,
+    days: int,
+    people: int,
+    travel_style: str,
+    itinerary: str,
+) -> tuple[str, str]:
+    weather_summary = get_destination_weather(destination, days)
+    prompt = f"""
+You are an expert travel packing assistant. Create a practical packing checklist.
+
+Destination: {destination}
+Trip duration: {days} days
+Number of travellers: {people}
+Travel style: {travel_style}
+Current weather signal: {weather_summary}
+Confirmed itinerary:
+{itinerary}
+
+Use Markdown checkboxes in every list. Organize the answer under these headings:
+Weather snapshot, Essentials, Clothing, Activity-specific gear, Toiletries and health,
+Documents and money, Electronics, Shared items, and Before you leave.
+Give realistic quantities, clearly distinguish per-person items from shared group items,
+adapt recommendations to the activities and travel style, and avoid unnecessary items.
+Mention that the weather is a current forecast and should be rechecked before departure.
+"""
+    packing_list = llm.invoke(prompt).content
+    return packing_list, weather_summary
 
 
 if __name__ == "__main__":
