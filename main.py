@@ -139,10 +139,10 @@ def packing_list(request: PackingRequest) -> dict[str, str]:
 
 @app.post("/replace-activity")
 def replace_activity(request: ReplaceActivityRequest) -> dict[str, str]:
-    updated_itinerary = replace_itinerary_activity(
+    replacement = replace_itinerary_activity(
         destination=request.destination,
         itinerary=request.itinerary,
         activity=request.activity,
         replacement_preferences=request.replacement_preferences,
     )
-    return {"updated_itinerary": updated_itinerary}
+    return replacement

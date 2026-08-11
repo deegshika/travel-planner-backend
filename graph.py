@@ -18,10 +18,22 @@ from langchain_core.prompts import PromptTemplate
 
 import chromadb
 import httpx
+from pydantic import BaseModel, Field
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 
 logger = logging.getLogger(__name__)
+
+
+class ActivityReplacement(BaseModel):
+    matched_text: str = Field(
+        description="Exact contiguous text copied verbatim from the existing itinerary."
+    )
+    replacement_text: str = Field(
+        description="Replacement text using the same Markdown style and level of detail."
+    )
+    day_label: str = Field(description="Day and time section containing the change.")
+    reason: str = Field(description="Short traveller-friendly reason for this alternative.")
 
 
 class TripState(TypedDict):
@@ -276,7 +288,7 @@ def replace_itinerary_activity(
     itinerary: str,
     activity: str,
     replacement_preferences: str,
-) -> str:
+) -> Dict[str, str]:
     query = f"{destination} {replacement_preferences or activity}"
     results = collection.query(
         query_texts=[query],
@@ -289,7 +301,7 @@ def replace_itinerary_activity(
             local_options.extend(documents)
 
     prompt = f"""
-You are carefully editing an existing travel itinerary for {destination}.
+You are preparing one precise patch for an existing travel itinerary for {destination}.
 
 Existing itinerary:
 {itinerary}
@@ -303,12 +315,28 @@ Traveller's replacement preference:
 Grounded local options:
 {chr(10).join(local_options) if local_options else 'No matching local guide entries found.'}
 
-Return the complete revised itinerary in Markdown. Replace only the requested activity and
-the directly related timing, transport, or cost details. Preserve every unrelated day and
-activity. Use a real option from the grounded local data when suitable. Do not add commentary
-before or after the revised itinerary.
+Do not rewrite or return the complete itinerary. Return one replacement patch only.
+matched_text must be copied character-for-character as one contiguous passage from the existing
+itinerary. Include only the requested activity and its directly related timing, transport, or
+cost details. replacement_text must use the same Markdown format and level of detail as
+matched_text. Use a real option from the grounded local data when suitable. day_label identifies
+where the passage occurs, and reason briefly explains why the alternative fits.
 """
-    return llm.invoke(prompt).content
+    structured_llm = llm.with_structured_output(
+        ActivityReplacement,
+        method="json_schema",
+        strict=True,
+    )
+    replacement = structured_llm.invoke(prompt)
+
+    if replacement.matched_text not in itinerary:
+        match_start = itinerary.lower().find(replacement.matched_text.lower())
+        if match_start < 0:
+            raise ValueError("The proposed replacement could not be matched to the itinerary.")
+        match_end = match_start + len(replacement.matched_text)
+        replacement.matched_text = itinerary[match_start:match_end]
+
+    return replacement.model_dump()
 
 
 if __name__ == "__main__":
