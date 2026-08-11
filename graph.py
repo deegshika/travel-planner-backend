@@ -152,23 +152,28 @@ def ask_local_expert(
     question: str,
     destination: str | None = None,
     itinerary: str | None = None,
+    history: List[Dict[str, str]] | None = None,
 ) -> str:
-    context = [
+    instructions = [
         "Answer the user's travel question accurately and concisely.",
         "Use the generated itinerary when it is relevant.",
     ]
     if destination:
-        context.append(
+        instructions.append(
             f"The destination is {destination}. When using search_local_guide, "
             f"pass destination={destination!r} and do not recommend places from other cities."
         )
-    if itinerary:
-        context.append(f"Generated itinerary:\n{itinerary}")
-    context.append(f"User question:\n{question}")
 
-    result = local_expert_agent.invoke({
-        "messages": [{"role": "user", "content": "\n\n".join(context)}]
-    })
+    current_message = []
+    if itinerary:
+        current_message.append(f"Generated itinerary:\n{itinerary}")
+    current_message.append(f"User question:\n{question}")
+
+    messages = [{"role": "system", "content": "\n".join(instructions)}]
+    messages.extend(history or [])
+    messages.append({"role": "user", "content": "\n\n".join(current_message)})
+
+    result = local_expert_agent.invoke({"messages": messages})
     return result["messages"][-1].content
 
 

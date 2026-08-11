@@ -1,9 +1,10 @@
 import logging
 import os
+from typing import Literal
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from supabase import create_client
 
 from graph import trip_graph, ask_local_expert
@@ -27,10 +28,16 @@ class TripRequest(BaseModel):
     budget: int
     interests: list[str]
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class QuestionRequest(BaseModel):
     question: str
     destination: str | None = None
     itinerary: str | None = None
+    history: list[ChatMessage] = Field(default_factory=list, max_length=20)
 
 
 app = FastAPI()
@@ -90,5 +97,6 @@ def ask(request: QuestionRequest) -> dict[str, str]:
         question=request.question,
         destination=request.destination,
         itinerary=request.itinerary,
+        history=[message.model_dump() for message in request.history],
     )
     return {"answer": answer}
