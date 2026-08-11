@@ -1,6 +1,9 @@
 from typing import TypedDict, List
 import os
 from dotenv import load_dotenv
+from langchain_core.prompts import PromptTemplate
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
 
 load_dotenv()
 
@@ -130,6 +133,21 @@ def build_graph():
     return graph.compile()
 
 trip_graph = build_graph()
+@tool
+def search_local_guide(query: str) -> str:
+    """Search the local travel knowledge base for facts about attractions, food, prices, and activities."""
+    results = collection.query(query_texts=[query], n_results=5)
+    texts = []
+    for docs in results.get("documents", []):
+        if isinstance(docs, list):
+            texts.extend(docs)
+    return "\n\n".join(texts) if texts else "No matching local data found."
+
+local_expert_agent = create_react_agent(llm, tools=[search_local_guide])
+
+def ask_local_expert(question: str) -> str:
+    result = local_expert_agent.invoke({"messages": [{"role": "user", "content": question}]})
+    return result["messages"][-1].content
 
 
 if __name__ == "__main__":

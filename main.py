@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client
 
-from graph import trip_graph
+from graph import trip_graph, ask_local_expert
 from chroma_setup import build_chroma
 import chromadb
 from dotenv import load_dotenv
@@ -26,6 +26,9 @@ class TripRequest(BaseModel):
     days: int
     budget: int
     interests: list[str]
+
+class QuestionRequest(BaseModel):
+    question: str
 
 
 app = FastAPI()
@@ -78,3 +81,8 @@ def plan_trip(request: TripRequest) -> dict[str, object]:
         except Exception as e:
             print(f"Supabase insert failed: {e}")
     return {"final_plan": result["final_plan"]}
+
+@app.post("/ask")
+def ask(request: QuestionRequest) -> dict[str, str]:
+    answer = ask_local_expert(request.question)
+    return {"answer": answer}
