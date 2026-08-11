@@ -134,9 +134,12 @@ def build_graph():
 
 trip_graph = build_graph()
 @tool
-def search_local_guide(query: str) -> str:
+def search_local_guide(query: str, destination: str = "") -> str:
     """Search the local travel knowledge base for facts about attractions, food, prices, and activities."""
-    results = collection.query(query_texts=[query], n_results=5)
+    query_args = {"query_texts": [query], "n_results": 5}
+    if destination:
+        query_args["where"] = {"city": destination}
+    results = collection.query(**query_args)
     texts = []
     for docs in results.get("documents", []):
         if isinstance(docs, list):
@@ -145,8 +148,27 @@ def search_local_guide(query: str) -> str:
 
 local_expert_agent = create_react_agent(llm, tools=[search_local_guide])
 
-def ask_local_expert(question: str) -> str:
-    result = local_expert_agent.invoke({"messages": [{"role": "user", "content": question}]})
+def ask_local_expert(
+    question: str,
+    destination: str | None = None,
+    itinerary: str | None = None,
+) -> str:
+    context = [
+        "Answer the user's travel question accurately and concisely.",
+        "Use the generated itinerary when it is relevant.",
+    ]
+    if destination:
+        context.append(
+            f"The destination is {destination}. When using search_local_guide, "
+            f"pass destination={destination!r} and do not recommend places from other cities."
+        )
+    if itinerary:
+        context.append(f"Generated itinerary:\n{itinerary}")
+    context.append(f"User question:\n{question}")
+
+    result = local_expert_agent.invoke({
+        "messages": [{"role": "user", "content": "\n\n".join(context)}]
+    })
     return result["messages"][-1].content
 
 

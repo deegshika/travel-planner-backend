@@ -29,6 +29,8 @@ class TripRequest(BaseModel):
 
 class QuestionRequest(BaseModel):
     question: str
+    destination: str | None = None
+    itinerary: str | None = None
 
 
 app = FastAPI()
@@ -84,5 +86,9 @@ def plan_trip(request: TripRequest) -> dict[str, object]:
 
 @app.post("/ask")
 def ask(request: QuestionRequest) -> dict[str, str]:
-    answer = ask_local_expert(request.question)
+    answer = ask_local_expert(
+        question=request.question,
+        destination=request.destination,
+        itinerary=request.itinerary,
+    )
     return {"answer": answer}
